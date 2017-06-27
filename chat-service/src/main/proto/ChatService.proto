@@ -33,7 +33,7 @@ message ChatMessage {
     string message = 1;
 }
 
-message ChatMessageFromService {
+message ChatMessageFromServer {
     google.protobuf.Timestamp timestamp = 1;
     string from = 2;
     string message = 3;
@@ -47,6 +47,6 @@ service ChatRoomService {
 }
 
 service ChatStreamService {
-    rpc chat(stream ChatMessage) returns (stream ChatMessageFromServer)
+    rpc chat(stream ChatMessage) returns (stream ChatMessageFromServer);
 }
 
