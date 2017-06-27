@@ -20,7 +20,7 @@ option java_multiple_files = true;
 
 import "google/protobuf/timestamp.proto";
 
-package com.example.chat.stream;
+package com.example.chat;
 
 message Empty {
 }
@@ -30,20 +30,21 @@ message Room {
 }
 
 message ChatMessage {
-    string message = 1;
+    string roomName = 1;
+    string message = 2;
 }
 
 message ChatMessageFromServer {
     google.protobuf.Timestamp timestamp = 1;
-    string from = 2;
-    string message = 3;
+    string roomName = 2;
+    string from = 3;
+    string message = 4;
 }
 
 service ChatRoomService {
     rpc createRoom(Room) returns (Room);
     rpc deleteRoom(Room) returns (Room);
-    rpc joinRoom(Room) returns (Empty);
-    rpc leaveRoom(Room) returns (Empty);
+    rpc getRooms(Empty) returns (stream Room);
 }
 
 service ChatStreamService {

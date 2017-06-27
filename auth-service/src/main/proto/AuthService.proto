@@ -18,5 +18,34 @@ syntax = "proto3";
 
 option java_multiple_files = true;
 
-package com.example.chat.auth;
+package com.example.auth;
+
+message AuthenticationRequest {
+    string username = 1;
+    string password = 2;
+}
+
+enum AuthenticationStatus {
+    NOT_AUTHENTICATED = 0;
+    AUTHENTICATED = 1;
+}
+
+message AuthenticationResponse {
+    AuthenticationStatus status = 1;
+    string token = 2;
+}
+
+message AuthorizationRequest {
+    string token = 1;
+}
+
+message AuthorizationResponse {
+    string username = 1;
+    repeated string roles = 2;
+}
+
+service AuthenticationService {
+    rpc authenticate(AuthenticationRequest) returns (AuthenticationResponse);
+    rpc authorization(AuthorizationRequest) returns (AuthorizationResponse);
+}
 
