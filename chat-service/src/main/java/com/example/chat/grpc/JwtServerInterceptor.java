@@ -40,6 +40,9 @@ public class JwtServerInterceptor implements ServerInterceptor {
   @Override
   public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> serverCall, Metadata metadata, ServerCallHandler<ReqT, RespT> serverCallHandler) {
     // TODO Get token from Metadata
+    String token = metadata.get(Constant.JWT_METADATA_KEY);
+    System.out.println("Token: " + token);
+
     // TODO If token is nul, or is invalid, close the call with Status.UNAUTHENTICATED
 
     // TODO Delete the following default implementation

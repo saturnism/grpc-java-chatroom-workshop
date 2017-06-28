@@ -17,10 +17,9 @@
 package com.example.chat;
 
 import com.example.auth.*;
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
-import io.grpc.Status;
-import io.grpc.StatusRuntimeException;
+import com.example.chat.grpc.Constant;
+import io.grpc.*;
+import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.StreamObserver;
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
@@ -99,10 +98,15 @@ public class ChatClient {
   public void initChatServices(String token) {
     logger.info("initializing chat services with token: " + token);
 
+    Metadata metadata = new Metadata();
+    metadata.put(Constant.JWT_METADATA_KEY, token);
+
     // TODO Add JWT Token via a Call Credential
     chatChannel = ManagedChannelBuilder.forTarget("localhost:9092")
+        .intercept(MetadataUtils.newAttachHeadersInterceptor(metadata))
         .usePlaintext(true)
         .build();
+
 
     chatRoomService = ChatRoomServiceGrpc.newBlockingStub(chatChannel);
     chatStreamService = ChatStreamServiceGrpc.newStub(chatChannel);

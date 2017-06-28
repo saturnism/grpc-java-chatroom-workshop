@@ -22,10 +22,7 @@ import com.example.chat.grpc.ChatRoomServiceImpl;
 import com.example.chat.grpc.ChatStreamServiceImpl;
 import com.example.chat.grpc.JwtServerInterceptor;
 import com.example.chat.repository.ChatRoomRepository;
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
-import io.grpc.Server;
-import io.grpc.ServerBuilder;
+import io.grpc.*;
 
 import java.io.IOException;
 import java.util.logging.Logger;
@@ -53,8 +50,8 @@ public class ChatServer {
 
     // TODO Add JWT Server Interceptor, then later, trace interceptor
     final Server server = ServerBuilder.forPort(9092)
-        .addService(chatRoomService)
-        .addService(chatStreamService)
+        .addService(ServerInterceptors.intercept(chatRoomService, jwtServerInterceptor))
+        .addService(ServerInterceptors.intercept(chatStreamService, jwtServerInterceptor))
         .build();
 
     Runtime.getRuntime().addShutdownHook(new Thread() {
