@@ -26,9 +26,6 @@ import static io.grpc.Metadata.ASCII_STRING_MARSHALLER;
  * Created by rayt on 10/6/16.
  */
 public class Constant {
-  public static final String JWT_SECRET = "ajsdklfsadf";
-
-
   public static final Metadata.Key<String> JWT_METADATA_KEY = Metadata.Key.of("jwt", ASCII_STRING_MARSHALLER);
   public static final Context.Key<DecodedJWT> JWT_CTX_KEY = Context.key("jwt");
 

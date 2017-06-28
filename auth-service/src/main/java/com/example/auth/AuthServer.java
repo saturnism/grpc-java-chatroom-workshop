@@ -44,6 +44,7 @@ public class AuthServer {
     admin.setUsername("admin");
     admin.setPassword("qwerty");
     admin.addRole("admin");
+    admin.addRole("user");
     repository.save(admin);
 
     User me = new User();

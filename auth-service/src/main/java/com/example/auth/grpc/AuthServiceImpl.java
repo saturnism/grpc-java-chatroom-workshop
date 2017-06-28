@@ -67,8 +67,8 @@ public class AuthServiceImpl extends AuthenticationServiceGrpc.AuthenticationSer
       responseObserver.onNext(AuthenticationResponse.newBuilder()
           .setToken(generateToken(request.getUsername()))
           .build());
+      responseObserver.onCompleted();
     }
-    responseObserver.onCompleted();
   }
 
   @Override

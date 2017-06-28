@@ -16,13 +16,19 @@
 
 package com.example.chat.grpc;
 
-import com.example.chat.*;
+import com.example.chat.ChatMessage;
+import com.example.chat.ChatMessageFromServer;
+import com.example.chat.ChatStreamServiceGrpc;
+import com.example.chat.Room;
 import com.example.chat.repository.ChatRoomRepository;
 import com.google.protobuf.Timestamp;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 
 import java.util.Collections;
 import java.util.Date;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
@@ -33,55 +39,74 @@ import java.util.logging.Logger;
  */
 public class ChatStreamServiceImpl extends ChatStreamServiceGrpc.ChatStreamServiceImplBase {
   private static final Logger logger = Logger.getLogger(ChatStreamServiceImpl.class.getName());
-  private static Set<StreamObserver<ChatMessageFromServer>> observers =Collections.newSetFromMap(new ConcurrentHashMap<>());
-
   private final ChatRoomRepository repository;
+  private Map<String, Set<StreamObserver<ChatMessageFromServer>>> roomObservers = new ConcurrentHashMap<>();
 
   public ChatStreamServiceImpl(ChatRoomRepository repository) {
     this.repository = repository;
   }
 
+  protected <T> boolean failedBecauseRoomNotFound(String roomName, StreamObserver<T> responseObserver) {
+    Room room = repository.findRoom(roomName);
+    if (room == null) {
+      responseObserver.onError(new StatusRuntimeException(Status.NOT_FOUND.withDescription("Room not found: " + roomName)));
+      return true;
+    }
+    return false;
+  }
+
+  protected Set<StreamObserver<ChatMessageFromServer>> getRoomObservers(String room) {
+    return roomObservers.putIfAbsent(room, Collections.newSetFromMap(new ConcurrentHashMap<>()));
+  }
+
+  protected void removeObserverFromAllRooms(StreamObserver<ChatMessageFromServer> responseObserver) {
+    roomObservers.entrySet().stream().forEach(e -> {
+      e.getValue().remove(responseObserver);
+    });
+  }
+
   @Override
   public StreamObserver<ChatMessage> chat(StreamObserver<ChatMessageFromServer> responseObserver) {
-    observers.add(responseObserver);
-
     final String username = Constant.USER_ID_CTX_KEY.get();
 
     return new StreamObserver<ChatMessage>() {
       @Override
       public void onNext(ChatMessage chatMessage) {
-        String roomName = chatMessage.getRoomName();
-        Room room = repository.findRoom(roomName);
         Timestamp now = Timestamp.newBuilder()
             .setSeconds(new Date().getTime())
             .build();
-
-        if (room == null) {
-          responseObserver.onNext(ChatMessageFromServer.newBuilder()
-              .setFrom("system")
-              .setTimestamp(now)
-              .setMessage("Room does not exist: " + roomName)
-          .build());
-          return;
+        Set<StreamObserver<ChatMessageFromServer>> observers = getRoomObservers(chatMessage.getRoomName());
+        switch (chatMessage.getType()) {
+          case JOIN:
+            observers.add(responseObserver);
+            return;
+          case LEAVE:
+            observers.remove(responseObserver);
+            return;
+          case TEXT:
+            if (!observers.contains(responseObserver)) {
+              responseObserver.onError(new StatusRuntimeException(Status.FAILED_PRECONDITION.withDescription("Not in the room: " + chatMessage.getRoomName())));
+            } else {
+              final ChatMessageFromServer messageFromServer = ChatMessageFromServer.newBuilder()
+                  .setTimestamp(now)
+                  .setFrom(username)
+                  .setRoomName(chatMessage.getRoomName())
+                  .setMessage(chatMessage.getMessage())
+                  .build();
+              observers.stream().forEach(o -> o.onNext(messageFromServer));
+            }
         }
-
-        final ChatMessageFromServer messageFromServer = ChatMessageFromServer.newBuilder()
-            .setTimestamp(now)
-            .setFrom(username)
-            .setRoomName(chatMessage.getRoomName())
-            .setMessage(chatMessage.getMessage())
-            .build();
-        observers.stream().forEach(o -> o.onNext(messageFromServer));
       }
 
       @Override
       public void onError(Throwable throwable) {
         logger.log(Level.SEVERE, "Error in StreamObserver", throwable);
+        removeObserverFromAllRooms(responseObserver);
       }
 
       @Override
       public void onCompleted() {
-        observers.remove(responseObserver);
+        removeObserverFromAllRooms(responseObserver);
       }
     };
   }
