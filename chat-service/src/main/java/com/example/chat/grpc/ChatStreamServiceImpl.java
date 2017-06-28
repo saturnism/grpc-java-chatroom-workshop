@@ -56,7 +56,8 @@ public class ChatStreamServiceImpl extends ChatStreamServiceGrpc.ChatStreamServi
   }
 
   protected Set<StreamObserver<ChatMessageFromServer>> getRoomObservers(String room) {
-    return roomObservers.putIfAbsent(room, Collections.newSetFromMap(new ConcurrentHashMap<>()));
+    roomObservers.putIfAbsent(room, Collections.newSetFromMap(new ConcurrentHashMap<>()));
+    return roomObservers.get(room);
   }
 
   protected void removeObserverFromAllRooms(StreamObserver<ChatMessageFromServer> responseObserver) {
