@@ -144,3 +144,6 @@ local.properties
 .cache-main
 .scala_dependencies
 .worksheet
+
+#mac specific files
+.DS_Store
