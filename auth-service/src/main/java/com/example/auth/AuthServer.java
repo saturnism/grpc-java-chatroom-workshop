@@ -40,21 +40,7 @@ public class AuthServer {
   private static Logger logger = Logger.getLogger(AuthServer.class.getName());
 
   private static UserRepository createRepository() {
-    UserRepository repository = new UserRepository();
-    User admin = new User();
-    admin.setUsername("admin");
-    admin.setPassword("qwerty");
-    admin.addRole("admin");
-    admin.addRole("user");
-    repository.save(admin);
-
-    User me = new User();
-    me.setUsername("rayt");
-    me.setPassword("hello");
-    me.addRole("user");
-    repository.save(me);
-
-    return repository;
+    return new UserRepository();
 
   }
 
