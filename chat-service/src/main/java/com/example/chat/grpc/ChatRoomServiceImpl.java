@@ -16,11 +16,16 @@
 
 package com.example.chat.grpc;
 
+import com.auth0.jwt.interfaces.DecodedJWT;
 import com.example.auth.AuthenticationServiceGrpc;
+import com.example.auth.AuthorizationRequest;
+import com.example.auth.AuthorizationResponse;
 import com.example.chat.ChatRoomServiceGrpc;
 import com.example.chat.Empty;
 import com.example.chat.Room;
 import com.example.chat.repository.ChatRoomRepository;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 
 /**
@@ -37,13 +42,21 @@ public class ChatRoomServiceImpl extends ChatRoomServiceGrpc.ChatRoomServiceImpl
 
   protected <T> boolean failBecauseNoAdminRole(StreamObserver<T> responseObserver) {
     // TODO Retrieve JWT from Constant.JWT_CTX_KEY
+    DecodedJWT jwt = Constant.JWT_CTX_KEY.get();
 
     // TODO Retrieve the roles
+    AuthorizationResponse authorization = authService.authorization(AuthorizationRequest.newBuilder()
+        .setToken(jwt.getToken())
+        .build());
 
     // TODO If not in the admin role, return Status.PERMISSION_DENIED
+    if (!authorization.getRolesList().contains("admin")) {
+      responseObserver.onError(Status.PERMISSION_DENIED.
+          withDescription("You don't have admin role").asRuntimeException());
+      return true;
+    }
 
     return false;
-
   }
 
   @Override

@@ -29,7 +29,10 @@ public class JwtClientInterceptor implements ClientInterceptor {
       @Override
       public void start(Listener<RespT> responseListener, Metadata headers) {
         // TODO Convert JWT Context to Metadata header
-
+        DecodedJWT jwt = Constant.JWT_CTX_KEY.get();
+        if (jwt != null) {
+          headers.put(Constant.JWT_METADATA_KEY, jwt.getToken());
+        }
         super.start(responseListener, headers);
       }
     };

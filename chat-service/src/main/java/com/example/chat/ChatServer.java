@@ -20,6 +20,7 @@ import com.auth0.jwt.algorithms.Algorithm;
 import com.example.auth.AuthenticationServiceGrpc;
 import com.example.chat.grpc.ChatRoomServiceImpl;
 import com.example.chat.grpc.ChatStreamServiceImpl;
+import com.example.chat.grpc.JwtClientInterceptor;
 import com.example.chat.grpc.JwtServerInterceptor;
 import com.example.chat.repository.ChatRoomRepository;
 import io.grpc.*;
@@ -41,6 +42,7 @@ public class ChatServer {
 
     // TODO Add trace interceptor
     final ManagedChannel authChannel = ManagedChannelBuilder.forTarget("localhost:9091")
+        .intercept(new JwtClientInterceptor())
         .usePlaintext(true)
         .build();
 
