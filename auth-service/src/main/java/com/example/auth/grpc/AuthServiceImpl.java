@@ -19,19 +19,14 @@ package com.example.auth.grpc;
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.JWTVerifier;
 import com.auth0.jwt.algorithms.Algorithm;
-import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.auth0.jwt.interfaces.DecodedJWT;
-import com.example.auth.*;
-import com.example.auth.domain.User;
 import com.example.auth.repository.UserRepository;
-import io.grpc.Status;
-import io.grpc.StatusRuntimeException;
-import io.grpc.stub.StreamObserver;
 
 /**
  * Created by rayt on 6/27/17.
  */
-public class AuthServiceImpl extends AuthenticationServiceGrpc.AuthenticationServiceImplBase {
+// TODO Extend gRPC's AuthenticationServiceBaseImpl
+public class AuthServiceImpl {
   private final UserRepository repository;
   private final String issuer;
   private final Algorithm algorithm;
@@ -57,39 +52,7 @@ public class AuthServiceImpl extends AuthenticationServiceGrpc.AuthenticationSer
     return verifier.verify(token);
   }
 
-  @Override
-  public void authenticate(AuthenticationRequest request, StreamObserver<AuthenticationResponse> responseObserver) {
-    User user = repository.findUser(request.getUsername());
-    if (user == null || !user.getPassword().equals(request.getPassword())) {
-      responseObserver.onError(new StatusRuntimeException(Status.UNAUTHENTICATED));
-      return;
-    } else {
-      responseObserver.onNext(AuthenticationResponse.newBuilder()
-          .setToken(generateToken(request.getUsername()))
-          .build());
-      responseObserver.onCompleted();
-    }
-  }
+  // TODO Override authenticate methods
 
-  @Override
-  public void authorization(AuthorizationRequest request, StreamObserver<AuthorizationResponse> responseObserver) {
-    try {
-      DecodedJWT jwt = jwtFromToken(request.getToken());
-      String username = jwt.getSubject();
-      User user = repository.findUser(username);
-
-      if (user == null) {
-        responseObserver.onError(new StatusRuntimeException(Status.NOT_FOUND.withDescription("Username " + username + " not found")));
-        return;
-      }
-
-      responseObserver.onNext(AuthorizationResponse.newBuilder()
-          .addAllRoles(user.getRoles())
-          .build());
-
-      responseObserver.onCompleted();
-    } catch (JWTVerificationException e) {
-      responseObserver.onError(new StatusRuntimeException(Status.UNAUTHENTICATED.withDescription(e.getMessage()).withCause(e)));
-    }
-  }
+  // TODO Override authorization method
 }
