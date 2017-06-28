@@ -16,14 +16,9 @@
 
 package com.example.chat;
 
-import brave.Tracing;
-import brave.grpc.GrpcTracing;
-import com.example.auth.*;
-import com.example.chat.grpc.JwtCallCredential;
+import com.example.auth.AuthenticationServiceGrpc;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.Status;
-import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
@@ -32,14 +27,10 @@ import org.jline.reader.UserInterruptException;
 import org.jline.reader.impl.completer.StringsCompleter;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
-import zipkin.Span;
-import zipkin.reporter.AsyncReporter;
-import zipkin.reporter.urlconnection.URLConnectionSender;
 
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Iterator;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 
@@ -56,13 +47,6 @@ public class ChatClient {
   // Initialize terminal
   private final Terminal terminal = TerminalBuilder.terminal();
   private final PrintWriter out = terminal.writer();
-
-  // Initialize Tracing contexts
-  private final AsyncReporter<Span> reporter = AsyncReporter.create(URLConnectionSender.create("http://localhost:9411/api/v1/spans"));
-  private final GrpcTracing tracing = GrpcTracing.create(Tracing.newBuilder()
-      .localServiceName("chat-client")
-      .reporter(reporter)
-      .build());
 
   // Channels
   private ManagedChannel authChannel;
@@ -95,11 +79,9 @@ public class ChatClient {
    */
   public void initAuthService() {
     logger.info("initializing auth service");
-    authChannel = ManagedChannelBuilder.forTarget("localhost:9091")
-        .intercept(tracing.newClientInterceptor())
-        .usePlaintext(true).build();
+    // TODO Build a new ManagedChannel
 
-    authService = AuthenticationServiceGrpc.newBlockingStub(authChannel);
+    // TODO Get a new Blocking Stub
   }
 
   /**
@@ -109,38 +91,19 @@ public class ChatClient {
    */
   public void initChatServices(String token) {
     logger.info("initializing chat services with token: " + token);
-    JwtCallCredential callCredential = new JwtCallCredential(token);
 
+    // TODO Add JWT Token via a Call Credential
     chatChannel = ManagedChannelBuilder.forTarget("localhost:9092")
-        .intercept(tracing.newClientInterceptor())
         .usePlaintext(true)
         .build();
 
-    chatRoomService = ChatRoomServiceGrpc.newBlockingStub(chatChannel).withCallCredentials(callCredential);
-    chatStreamService = ChatStreamServiceGrpc.newStub(chatChannel).withCallCredentials(callCredential);
+    chatRoomService = ChatRoomServiceGrpc.newBlockingStub(chatChannel);
+    chatStreamService = ChatStreamServiceGrpc.newStub(chatChannel);
   }
 
   public void initChatStream() {
-    this.toServer = chatStreamService.chat(new StreamObserver<ChatMessageFromServer>() {
-      @Override
-      public void onNext(ChatMessageFromServer chatMessageFromServer) {
-        out.println(String.format("\n%tr %s> %s", chatMessageFromServer.getTimestamp().getSeconds(),
-            chatMessageFromServer.getFrom(),
-            chatMessageFromServer.getMessage()));
-        out.flush();
-      }
-
-      @Override
-      public void onError(Throwable throwable) {
-        logger.log(Level.SEVERE, "gRPC error", throwable);
-      }
-
-      @Override
-      public void onCompleted() {
-        logger.severe("server closed connection, shutting down...");
-        shutdown();
-      }
-    });
+    // TODO Call chatStreamService.chat(...)
+    // TODO and assign the server responseObserver to toServer variable
   }
 
   protected void prompt() throws Exception {
@@ -258,32 +221,14 @@ public class ChatClient {
    * @return If authenticated, return the authentication token, else, return null
    */
   private String authenticate(String username, String password) {
-
     logger.info("authenticating user: " + username);
 
-    try {
-      AuthenticationResponse authenticationReponse = authService.authenticate(AuthenticationRequest.newBuilder()
-          .setUsername(username)
-          .setPassword(password)
-          .build());
-
-      String token = authenticationReponse.getToken();
-
-      AuthorizationResponse authorizationResponse = authService.authorization(AuthorizationRequest.newBuilder()
-          .setToken(token)
-          .build());
-
-      logger.info("user has these roles: " + authorizationResponse.getRolesList());
-
-      return token;
-    } catch (StatusRuntimeException e) {
-      if (e.getStatus().getCode() == Status.Code.UNAUTHENTICATED) {
-        logger.log(Level.SEVERE, "user not authenticated: " + username, e);
-      } else {
-        logger.log(Level.SEVERE, "caught a gRPC exception", e);
-      }
-      return null;
-    }
+    // TODO Call authService.authenticate(...) and retreive the token
+    // TODO Retrieve all the roles with authService.authorization(...) and print out all the roles
+    // TODO Return the token
+    // TODO Catch StatusRuntimeException, because there could be Unauthenticated errors.
+    // TODO If there are errors, return null
+    return null;
   }
 
   /**
@@ -342,11 +287,9 @@ public class ChatClient {
    */
   private void sendMessage(String room, String message) {
     logger.info("sending chat message");
-    toServer.onNext(ChatMessage.newBuilder()
-        .setRoomName(room)
-        .setType(MessageType.TEXT)
-        .setMessage(message)
-        .build());
+    // TODO call toServer.onNext(...)
+    logger.severe("not implemented!");
+
   }
 
   class CurrentState {
