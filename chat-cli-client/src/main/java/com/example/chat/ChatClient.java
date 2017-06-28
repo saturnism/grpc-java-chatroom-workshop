@@ -16,9 +16,11 @@
 
 package com.example.chat;
 
-import com.example.auth.AuthenticationServiceGrpc;
+import com.example.auth.*;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
@@ -31,6 +33,7 @@ import org.jline.terminal.TerminalBuilder;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Iterator;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 
@@ -80,8 +83,12 @@ public class ChatClient {
   public void initAuthService() {
     logger.info("initializing auth service");
     // TODO Build a new ManagedChannel
+    authChannel = ManagedChannelBuilder.forTarget("localhost:9091")
+        .usePlaintext(true)
+        .build();
 
     // TODO Get a new Blocking Stub
+    authService = AuthenticationServiceGrpc.newBlockingStub(authChannel);
   }
 
   /**
@@ -223,12 +230,32 @@ public class ChatClient {
   private String authenticate(String username, String password) {
     logger.info("authenticating user: " + username);
 
-    // TODO Call authService.authenticate(...) and retreive the token
-    // TODO Retrieve all the roles with authService.authorization(...) and print out all the roles
-    // TODO Return the token
-    // TODO Catch StatusRuntimeException, because there could be Unauthenticated errors.
-    // TODO If there are errors, return null
-    return null;
+    try {
+      // TODO Call authService.authenticate(...) and retreive the token
+      AuthenticationResponse authenticationReponse = authService.authenticate(AuthenticationRequest.newBuilder()
+          .setUsername(username)
+          .setPassword(password)
+          .build());
+
+      String token = authenticationReponse.getToken();
+
+      // TODO Retrieve all the roles with authService.authorization(...) and print out all the roles
+      AuthorizationResponse authorizationResponse = authService.authorization(AuthorizationRequest.newBuilder()
+          .setToken(token)
+          .build());
+      logger.info("user has these roles: " + authorizationResponse.getRolesList());
+
+      // TODO Return the token
+      return token;
+    } catch (StatusRuntimeException e) {
+      if (e.getStatus().getCode() == Status.Code.UNAUTHENTICATED) {
+        logger.log(Level.SEVERE, "user not authenticated: " + username, e);
+      } else {
+        logger.log(Level.SEVERE, "caught a gRPC exception", e);
+      }
+      // TODO If there are errors, return null
+      return null;
+    }
   }
 
   /**
