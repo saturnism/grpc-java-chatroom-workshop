@@ -38,8 +38,8 @@ import zipkin.reporter.AsyncReporter;
 import zipkin.reporter.urlconnection.URLConnectionSender;
 
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.Iterator;
-import java.util.concurrent.CountDownLatch;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -49,64 +49,210 @@ import java.util.logging.Logger;
 public class ChatClient {
   private static Logger logger = Logger.getLogger(ChatClient.class.getName());
 
-  public static void main(String[] args) throws IOException {
-    final AsyncReporter<Span> reporter = AsyncReporter.create(URLConnectionSender.create("http://localhost:9411/api/v1/spans"));
-    final GrpcTracing tracing = GrpcTracing.create(Tracing.newBuilder()
-        .localServiceName("chat-client")
-        .reporter(reporter)
-        .build());
+  public static String AUTH_SERVER = "localhost:9091";
+  public static String CHAT_SERVER = "localhost:9092";
 
-    final Metadata headers = new Metadata();
-    headers.put(Constant.CLIENT_ID_METADATA_KEY, "chat-cli-client");
-    ClientInterceptor headersInterceptor = MetadataUtils.newAttachHeadersInterceptor(headers);
+  public static void main(String[] args) throws Exception {
+    (new ChatClient()).runStartingPrompt();
+    System.exit(1);
+  }
 
-    final ManagedChannel authChannel = ManagedChannelBuilder.forTarget("localhost:9091")
-        .usePlaintext(true)
-        .intercept(headersInterceptor, tracing.newClientInterceptor())
-        .build();
-    AuthenticationServiceGrpc.AuthenticationServiceBlockingStub authService = AuthenticationServiceGrpc.newBlockingStub(authChannel);
+  public void runStartingPrompt() throws Exception {
 
+    GrpcTracing tracing = createTracing();
+    AuthenticationServiceGrpc.AuthenticationServiceBlockingStub authService = createAuthChannel(tracing);
+
+    String startOptions = "login [username] | create [username] | quit\n->";
+
+    Terminal terminal = TerminalBuilder.terminal();
+    PrintWriter out = terminal.writer();
+// StringsCompleter stringsCompleter = new StringsCompleter("/quit", "/join", "/leave");
+
+    LineReader lineReader = LineReaderBuilder.builder()
+            .terminal(terminal)
+            .build();
+
+
+    String nextLine;
+    System.out.println("Press ctrl+D to quit");
+    while (true) {
+      try {
+        nextLine = lineReader.readLine(startOptions);
+        String[] splitLine = nextLine.split(" ");
+        String command = splitLine[0];
+        logger.info("processing " + command);
+        if (splitLine.length >= 2) {
+          String username = splitLine[1];
+          if (command.equalsIgnoreCase("create")) {
+            out.println("creating user not implemented");
+            //createUser(username, lineReader, authService);
+          } else if (command.equalsIgnoreCase("login")) {
+            out.println("processing login user");
+            login(username, lineReader, authService, tracing);
+          }
+        } else if (command.equalsIgnoreCase("quit")) {
+          break;
+        }
+      } catch (EndOfFileException e) {
+        System.exit(1);
+      }
+    }
+  }
+
+  //create is not implemented yet
+  public void createUser(String username,
+                         LineReader reader,
+                         AuthenticationServiceGrpc.AuthenticationServiceBlockingStub authService) throws Exception {
+    String password = reader.readLine("password> ", '*');
+    String roles = reader.readLine("roles (admin, user)> ");
+    //TODO - add create user to auth service
+  }
+
+  private class CurrentClientState {
+    StreamObserver<ChatMessage> observer = null;
+    String room = null;
+
+    public CurrentClientState(StreamObserver<ChatMessage> observer, String room) {
+      this.observer = observer;
+      this.room = room;
+    }
+  }
+
+  public void login(String username,
+                    LineReader lineReader,
+                    AuthenticationServiceGrpc.AuthenticationServiceBlockingStub authService,
+                    GrpcTracing tracing) throws IOException {
+    String password = lineReader.readLine("password> ", '*');
+
+    logger.info("authenticated user: " + username);
     AuthenticationResponse authenticationReponse = authService.authenticate(AuthenticationRequest.newBuilder()
-        .setUsername("admin")
-        .setPassword("qwerty")
-        .build());
+            .setUsername(username)
+            .setPassword(password)
+            .build());
 
     String token = authenticationReponse.getToken();
 
     AuthorizationResponse authorizationResponse = authService.authorization(AuthorizationRequest.newBuilder()
-        .setToken(token)
-        .build());
+            .setToken(token)
+            .build());
 
+    //TODO - handle failed login and report to the user a failed login attempt
     logger.info(authorizationResponse.toString());
 
-    final ManagedChannel chatChannel = ManagedChannelBuilder.forTarget("localhost:9092")
-        .usePlaintext(true)
-        .intercept(headersInterceptor, tracing.newClientInterceptor())
-        .build();
+    //this is the room service for creating, listing rooms, etc.
+    ChatRoomServiceGrpc.ChatRoomServiceBlockingStub chatRoomService = createChatRoomService(token, tracing);
 
-    ChatRoomServiceGrpc.ChatRoomServiceBlockingStub chatRoomService = ChatRoomServiceGrpc.newBlockingStub(chatChannel)
-        .withCallCredentials(new JwtCallCredential(token));
+    //this is the service for sending and recieving messages.
+    ChatStreamServiceGrpc.ChatStreamServiceStub chatStreamService = createChatStreamService(token, tracing);
 
-    chatRoomService.createRoom(Room.newBuilder()
-        .setName("grpc-dev")
-        .build());
-    chatRoomService.createRoom(Room.newBuilder()
-        .setName("grpc-user")
-        .build());
+    CurrentClientState currentClientState = null;
+    String prompt = "[chat message] | /join [room] | /leave [room] | /create [room] | /list | /quit\n" + username + "->";
 
-    Iterator<Room> rooms = chatRoomService.getRooms(Empty.getDefaultInstance());
-    rooms.forEachRemaining(r -> logger.info("Room: " + r.getName()));
+    while (true) {
+      //managing state with currentClientState seems wrong - wonder if there is a better way?
+      currentClientState = processCommandLine(username, lineReader, chatRoomService, chatStreamService, currentClientState, prompt);
 
-    ChatStreamServiceGrpc.ChatStreamServiceStub chatStreamService = ChatStreamServiceGrpc.newStub(chatChannel)
-        .withCallCredentials(new JwtCallCredential(token));
+    }
+  }
 
-    LineReader reader = LineReaderBuilder.builder().build();
-    String prompt = "admin> ";
+  private CurrentClientState processCommandLine(String username, LineReader lineReader,
+                                                ChatRoomServiceGrpc.ChatRoomServiceBlockingStub chatRoomService,
+                                                ChatStreamServiceGrpc.ChatStreamServiceStub chatStreamService,
+                                                CurrentClientState currentClientState, String prompt) {
+    try {
+      String line = lineReader.readLine(prompt);
+      if (line.startsWith("/")) {
+        currentClientState = processChatCommands(username, chatRoomService,chatStreamService, currentClientState, line);
+      } else if (!line.isEmpty()) {
+        //if the line was not a chat command then send it as a message to the other rooms
+        if ((currentClientState == null) || (currentClientState.observer == null)) {
+          logger.info("error - not in a room");
+        } else {
+          logger.info("sending chat message");
+          currentClientState.observer.onNext(ChatMessage.newBuilder()
+                  .setType(MessageType.TEXT)
+                  .setRoomName(currentClientState.room)
+                  .setMessage(line)
+                  .build());
+        }
+      }
+    } catch (UserInterruptException e) {
+    } catch (EndOfFileException e) {
+      System.exit(1);
+    }
+    return currentClientState;
+  }
 
-    StreamObserver<ChatMessage> observer = chatStreamService.chat(new StreamObserver<ChatMessageFromServer>() {
+  private CurrentClientState processChatCommands(String username, ChatRoomServiceGrpc.ChatRoomServiceBlockingStub chatRoomService,
+                                                 ChatStreamServiceGrpc.ChatStreamServiceStub chatStreamService,
+                                                 CurrentClientState currentClientState, String line) {
+
+    if ("/quit".equalsIgnoreCase(line) || "/exit".equalsIgnoreCase(line)) {
+      logger.info("Exiting chat client");
+      System.exit(1);
+    }
+    else if ("/list".equalsIgnoreCase(line) || "/exit".equalsIgnoreCase(line)) {
+      logger.info("listing rooms");
+      Iterator<Room> rooms = chatRoomService.getRooms(Empty.getDefaultInstance());
+      rooms.forEachRemaining(r -> logger.info("Room: " + r.getName()));
+    }
+    //process leave room
+    else if ("/leave".equalsIgnoreCase(line)) {
+      if ((currentClientState == null) || (currentClientState.observer == null)) {
+        logger.info("error - not in a room");
+      } else {
+        currentClientState.observer.onNext(ChatMessage.newBuilder()
+                .setType(MessageType.JOIN)
+                .setRoomName(currentClientState.room)
+                .setMessage(line)
+                .build());
+        //TODO - what else do we need to do when the user leaves a room?
+        currentClientState = null;
+      }
+    }
+    //process commands that take a room name like join and create
+    else {
+      String[] splitLine = line.split(" ");
+      if (splitLine.length == 2) {
+        String command = splitLine[0];
+        String room = splitLine[1];
+        currentClientState = processRoomCommand(username, chatRoomService, chatStreamService, currentClientState, command, room);
+      }
+    }
+    return currentClientState;
+  }
+
+  private CurrentClientState processRoomCommand(String username,
+                                                ChatRoomServiceGrpc.ChatRoomServiceBlockingStub chatRoomService,
+                                                ChatStreamServiceGrpc.ChatStreamServiceStub chatStreamService,
+                                                CurrentClientState currentClientState,
+                                                String command, String room) {
+
+    if ("/join".equalsIgnoreCase(command)) {
+      StreamObserver<ChatMessage> observer = createChatRoomObserver(chatStreamService, username, room);
+      observer.onNext(ChatMessage.newBuilder()
+              .setType(MessageType.JOIN)
+              .setRoomName(room)
+              .setMessage("joining room")
+              .build());
+
+      currentClientState = new CurrentClientState(observer, room);
+      logger.info("joined room");
+    }
+    return currentClientState;
+  }
+
+  private StreamObserver<ChatMessage> createChatRoomObserver(ChatStreamServiceGrpc.ChatStreamServiceStub chatStreamService,
+                                                             String username, String room) {
+    return chatStreamService.chat(new StreamObserver<ChatMessageFromServer>() {
       @Override
       public void onNext(ChatMessageFromServer chatMessageFromServer) {
-        System.out.println(String.format("\n%s> %s", chatMessageFromServer.getFrom(), chatMessageFromServer.getMessage()));
+        //If the message is for the same room that we are logged into and the message is not from ourselves then print it to the console
+        //TODO - do we need to check for room?  We should get messages destined for other rooms?
+        String roomName = chatMessageFromServer.getRoomName();
+        logger.info("processing message for room: " + room);
+        if (roomName.equalsIgnoreCase(room) && !chatMessageFromServer.getFrom().equalsIgnoreCase(username))
+          System.out.println(String.format("\n%s> %s", chatMessageFromServer.getFrom(), chatMessageFromServer.getMessage()));
       }
 
       @Override
@@ -118,38 +264,66 @@ public class ChatClient {
       public void onCompleted() {
       }
     });
+  }
+
+  protected GrpcTracing createTracing() {
+    final AsyncReporter<Span> reporter = AsyncReporter.create(URLConnectionSender.create("http://localhost:9411/api/v1/spans"));
+    final GrpcTracing tracing = GrpcTracing.create(Tracing.newBuilder()
+            .localServiceName("chat-client")
+            .reporter(reporter)
+            .build());
+
+    return tracing;
+  }
+
+  private ManagedChannel createManagedChannel(GrpcTracing tracing, String server) {
+
+    final Metadata headers = new Metadata();
+    headers.put(Constant.CLIENT_ID_METADATA_KEY, "chat-cli-client");
+
+    ClientInterceptor headersInterceptor = MetadataUtils.newAttachHeadersInterceptor(headers);
+
+    final ManagedChannel managedChannel = ManagedChannelBuilder.forTarget(server)
+            .usePlaintext(true)
+            .intercept(headersInterceptor, tracing.newClientInterceptor())
+            .build();
 
     Runtime.getRuntime().addShutdownHook(new Thread() {
       @Override
       public void run() {
-        authChannel.shutdownNow();
-        chatChannel.shutdownNow();
+        managedChannel.shutdownNow();
       }
     });
+    return managedChannel;
+  }
 
-    Terminal terminal = TerminalBuilder.terminal();
-    LineReader lineReader = LineReaderBuilder.builder()
-        .terminal(terminal)
-        .build();
 
-    while (true) {
-      String line = null;
-      try {
-        line = reader.readLine(prompt);
-        if (line.startsWith("/")) {
-          if ("/quit".equalsIgnoreCase(line) || "/exit".equalsIgnoreCase(line)) {
-            System.exit(1);
-          }
-        } else if (!line.isEmpty()) {
-          observer.onNext(ChatMessage.newBuilder()
-              .setRoomName("grpc-dev")
-              .setMessage(line)
-              .build());
-        }
-      } catch (UserInterruptException e) {
-      } catch (EndOfFileException e) {
-        System.exit(1);
-      }
-    }
+  protected AuthenticationServiceGrpc.AuthenticationServiceBlockingStub createAuthChannel(GrpcTracing tracing) {
+    final ManagedChannel authChannel = createManagedChannel(tracing, AUTH_SERVER);
+    return AuthenticationServiceGrpc.newBlockingStub(authChannel);
+  }
+
+  protected ChatStreamServiceGrpc.ChatStreamServiceStub createChatStreamService(String token, GrpcTracing tracing) {
+    final ManagedChannel chatChannel = createManagedChannel(tracing, CHAT_SERVER);
+    return ChatStreamServiceGrpc.newStub(chatChannel)
+            .withCallCredentials(new JwtCallCredential(token));
+  }
+
+  protected ChatRoomServiceGrpc.ChatRoomServiceBlockingStub createChatRoomService(String token, GrpcTracing tracing) {
+    final ManagedChannel chatChannel = createManagedChannel(tracing, CHAT_SERVER);
+    ChatRoomServiceGrpc.ChatRoomServiceBlockingStub chatRoomService = ChatRoomServiceGrpc.newBlockingStub(chatChannel)
+            .withCallCredentials(new JwtCallCredential(token));
+
+    chatRoomService.createRoom(Room.newBuilder()
+            .setName("grpc-dev")
+            .build());
+    chatRoomService.createRoom(Room.newBuilder()
+            .setName("grpc-user")
+            .build());
+
+    Iterator<Room> rooms = chatRoomService.getRooms(Empty.getDefaultInstance());
+    rooms.forEachRemaining(r -> logger.info("Room: " + r.getName()));
+
+    return chatRoomService;
   }
 }
