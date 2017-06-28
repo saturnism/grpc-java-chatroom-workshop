@@ -16,21 +16,17 @@
 
 package com.example.chat.grpc;
 
-import com.auth0.jwt.interfaces.DecodedJWT;
-import io.grpc.Context;
-import io.grpc.Metadata;
-
-import static io.grpc.Metadata.ASCII_STRING_MARSHALLER;
+import io.grpc.*;
 
 /**
  * Created by rayt on 10/6/16.
  */
-public class Constant {
-  public static final Metadata.Key<String> CLIENT_ID_METADATA_KEY = Metadata.Key.of("clientId", ASCII_STRING_MARSHALLER);
-  public static final Context.Key<String> CLIENT_ID_CTX_KEY = Context.key("clientId");
+public class ClientIdServerInterceptor implements ServerInterceptor {
+  @Override
+  public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> serverCall, Metadata metadata, ServerCallHandler<ReqT, RespT> serverCallHandler) {
+    String clientId = metadata.get(Constant.CLIENT_ID_METADATA_KEY);
+    Context ctx = Context.current().withValue(Constant.CLIENT_ID_CTX_KEY, clientId);
 
-  public static final Metadata.Key<String> JWT_METADATA_KEY = Metadata.Key.of("jwt", ASCII_STRING_MARSHALLER);
-  public static final Context.Key<DecodedJWT> JWT_CTX_KEY = Context.key("jwt");
-
-  public static final Context.Key<String> USER_ID_CTX_KEY = Context.key("userId");
+    return Contexts.interceptCall(ctx, serverCall, metadata, serverCallHandler);
+  }
 }

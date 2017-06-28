@@ -17,20 +17,23 @@
 package com.example.chat.grpc;
 
 import com.auth0.jwt.interfaces.DecodedJWT;
-import io.grpc.Context;
-import io.grpc.Metadata;
-
-import static io.grpc.Metadata.ASCII_STRING_MARSHALLER;
+import io.grpc.*;
 
 /**
  * Created by rayt on 10/6/16.
  */
-public class Constant {
-  public static final Metadata.Key<String> CLIENT_ID_METADATA_KEY = Metadata.Key.of("clientId", ASCII_STRING_MARSHALLER);
-  public static final Context.Key<String> CLIENT_ID_CTX_KEY = Context.key("clientId");
-
-  public static final Metadata.Key<String> JWT_METADATA_KEY = Metadata.Key.of("jwt", ASCII_STRING_MARSHALLER);
-  public static final Context.Key<DecodedJWT> JWT_CTX_KEY = Context.key("jwt");
-
-  public static final Context.Key<String> USER_ID_CTX_KEY = Context.key("userId");
+public class JwtClientInterceptor implements ClientInterceptor {
+  @Override
+  public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(MethodDescriptor<ReqT, RespT> methodDescriptor, CallOptions callOptions, Channel channel) {
+    return new ForwardingClientCall.SimpleForwardingClientCall<ReqT, RespT>(channel.newCall(methodDescriptor, callOptions)) {
+      @Override
+      public void start(Listener<RespT> responseListener, Metadata headers) {
+        DecodedJWT jwt = Constant.JWT_CTX_KEY.get();
+        if (jwt != null) {
+          headers.put(Constant.JWT_METADATA_KEY, jwt.getToken());
+        }
+        super.start(responseListener, headers);
+      }
+    };
+  }
 }

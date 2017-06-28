@@ -20,9 +20,7 @@ import brave.Tracing;
 import brave.grpc.GrpcTracing;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.example.auth.AuthenticationServiceGrpc;
-import com.example.chat.grpc.ChatRoomServiceImpl;
-import com.example.chat.grpc.ChatStreamServiceImpl;
-import com.example.chat.grpc.JwtServerInterceptor;
+import com.example.chat.grpc.*;
 import com.example.chat.repository.ChatRoomRepository;
 import io.grpc.*;
 import zipkin.Span;
@@ -47,26 +45,27 @@ public class ChatServer {
 
     final ChatRoomRepository repository = new ChatRoomRepository();
     final JwtServerInterceptor jwtServerInterceptor = new JwtServerInterceptor("auth-issuer", Algorithm.HMAC256("secret"));
+    final ClientIdServerInterceptor clientIdServerInterceptor = new ClientIdServerInterceptor();
 
-    final ManagedChannel channel = ManagedChannelBuilder.forTarget("localhost:9091")
-        .intercept(tracing.newClientInterceptor())
+    final ManagedChannel authChannel = ManagedChannelBuilder.forTarget("localhost:9091")
+        .intercept(tracing.newClientInterceptor(), new ClientIdClientInterceptor())
         .usePlaintext(true)
         .build();
 
-    final AuthenticationServiceGrpc.AuthenticationServiceBlockingStub authService = AuthenticationServiceGrpc.newBlockingStub(channel);
+    final AuthenticationServiceGrpc.AuthenticationServiceBlockingStub authService = AuthenticationServiceGrpc.newBlockingStub(authChannel);
     final ChatRoomServiceImpl chatRoomService = new ChatRoomServiceImpl(repository, authService);
     final ChatStreamServiceImpl chatStreamService = new ChatStreamServiceImpl(repository);
 
     final Server server = ServerBuilder.forPort(9092)
-        .addService(ServerInterceptors.intercept(chatRoomService, jwtServerInterceptor, tracing.newServerInterceptor()))
-        .addService(ServerInterceptors.intercept(chatStreamService, jwtServerInterceptor, tracing.newServerInterceptor()))
+        .addService(ServerInterceptors.intercept(chatRoomService, clientIdServerInterceptor, jwtServerInterceptor, tracing.newServerInterceptor()))
+        .addService(ServerInterceptors.intercept(chatStreamService, clientIdServerInterceptor, jwtServerInterceptor, tracing.newServerInterceptor()))
         .build();
 
     Runtime.getRuntime().addShutdownHook(new Thread() {
       @Override
       public void run() {
         server.shutdownNow();
-        channel.shutdownNow();
+        authChannel.shutdownNow();
       }
     });
 
