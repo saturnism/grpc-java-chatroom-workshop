@@ -28,10 +28,8 @@ public class JwtClientInterceptor implements ClientInterceptor {
     return new ForwardingClientCall.SimpleForwardingClientCall<ReqT, RespT>(channel.newCall(methodDescriptor, callOptions)) {
       @Override
       public void start(Listener<RespT> responseListener, Metadata headers) {
-        DecodedJWT jwt = Constant.JWT_CTX_KEY.get();
-        if (jwt != null) {
-          headers.put(Constant.JWT_METADATA_KEY, jwt.getToken());
-        }
+        // TODO Convert JWT Context to Metadata header
+
         super.start(responseListener, headers);
       }
     };

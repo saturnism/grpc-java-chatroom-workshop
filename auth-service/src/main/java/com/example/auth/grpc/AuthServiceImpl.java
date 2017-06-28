@@ -25,12 +25,12 @@ import com.example.auth.*;
 import com.example.auth.domain.User;
 import com.example.auth.repository.UserRepository;
 import io.grpc.Status;
-import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 
 /**
  * Created by rayt on 6/27/17.
  */
+// TODO Extend gRPC's AuthenticationServiceBaseImpl
 public class AuthServiceImpl extends AuthenticationServiceGrpc.AuthenticationServiceImplBase {
   private final UserRepository repository;
   private final String issuer;
@@ -57,39 +57,40 @@ public class AuthServiceImpl extends AuthenticationServiceGrpc.AuthenticationSer
     return verifier.verify(token);
   }
 
+  // TODO Override authenticate methods
   @Override
   public void authenticate(AuthenticationRequest request, StreamObserver<AuthenticationResponse> responseObserver) {
     User user = repository.findUser(request.getUsername());
     if (user == null || !user.getPassword().equals(request.getPassword())) {
-      responseObserver.onError(new StatusRuntimeException(Status.UNAUTHENTICATED));
+      responseObserver.onError(Status.UNAUTHENTICATED.asRuntimeException());
       return;
-    } else {
-      responseObserver.onNext(AuthenticationResponse.newBuilder()
-          .setToken(generateToken(request.getUsername()))
-          .build());
-      responseObserver.onCompleted();
     }
+
+    String token = generateToken(request.getUsername());
+    responseObserver.onNext(AuthenticationResponse.newBuilder()
+        .setToken(token)
+        .build());
+    responseObserver.onCompleted();
   }
 
+  // TODO Override authorization method
   @Override
   public void authorization(AuthorizationRequest request, StreamObserver<AuthorizationResponse> responseObserver) {
     try {
       DecodedJWT jwt = jwtFromToken(request.getToken());
       String username = jwt.getSubject();
       User user = repository.findUser(username);
-
       if (user == null) {
-        responseObserver.onError(new StatusRuntimeException(Status.NOT_FOUND.withDescription("Username " + username + " not found")));
+        responseObserver.onError(Status.UNAUTHENTICATED.asRuntimeException());
         return;
       }
-
       responseObserver.onNext(AuthorizationResponse.newBuilder()
           .addAllRoles(user.getRoles())
           .build());
-
       responseObserver.onCompleted();
     } catch (JWTVerificationException e) {
-      responseObserver.onError(new StatusRuntimeException(Status.UNAUTHENTICATED.withDescription(e.getMessage()).withCause(e)));
+      responseObserver.onError(Status.UNAUTHENTICATED.asRuntimeException());
+      return;
     }
   }
 }

@@ -16,18 +16,11 @@
 
 package com.example.auth;
 
-import brave.Tracing;
-import brave.grpc.GrpcTracing;
 import com.auth0.jwt.algorithms.Algorithm;
-import com.example.auth.domain.User;
 import com.example.auth.grpc.AuthServiceImpl;
 import com.example.auth.repository.UserRepository;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
-import io.grpc.ServerInterceptors;
-import zipkin.Span;
-import zipkin.reporter.AsyncReporter;
-import zipkin.reporter.urlconnection.URLConnectionSender;
 
 import java.io.IOException;
 import java.util.logging.Logger;
@@ -44,17 +37,12 @@ public class AuthServer {
   }
 
   public static void main(String[] args) throws IOException, InterruptedException {
-    final AsyncReporter<Span> reporter = AsyncReporter.create(URLConnectionSender.create("http://localhost:9411/api/v1/spans"));
-    final GrpcTracing tracing = GrpcTracing.create(Tracing.newBuilder()
-        .localServiceName("auth-service")
-        .reporter(reporter)
-        .build());
     final UserRepository repository = createRepository();
-    final Algorithm algorithm = Algorithm.HMAC256("secret");
-    final AuthServiceImpl authService = new AuthServiceImpl(repository, "auth-issuer", algorithm);
 
-    final Server server = ServerBuilder.forPort(9091)
-        .addService(ServerInterceptors.intercept(authService, tracing.newServerInterceptor()))
+    // TODO Use ServerBuilder to create a new Server instance. Start it, and await termination.
+    Algorithm algorithm = Algorithm.HMAC256("secret");
+    Server server = ServerBuilder.forPort(9091)
+        .addService(new AuthServiceImpl(repository, "auth-issuer", algorithm))
         .build();
 
     Runtime.getRuntime().addShutdownHook(new Thread() {
@@ -63,11 +51,10 @@ public class AuthServer {
         server.shutdownNow();
       }
     });
-    server.start();
 
+    server.start();
     logger.info("Server started on port 9091");
 
     server.awaitTermination();
-
   }
 }

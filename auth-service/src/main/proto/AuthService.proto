@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
+// 1. Set the syntax, package, and options
 syntax = "proto3";
-
+package com.example.auth;
 option java_multiple_files = true;
 
-package com.example.auth;
-
+// 2. Add the message definitions
 message AuthenticationRequest {
     string username = 1;
     string password = 2;
@@ -38,8 +38,11 @@ message AuthorizationResponse {
     repeated string roles = 2;
 }
 
+
+// 3. Add the service definitions
 service AuthenticationService {
     rpc authenticate(AuthenticationRequest) returns (AuthenticationResponse);
     rpc authorization(AuthorizationRequest) returns (AuthorizationResponse);
 }
+
 

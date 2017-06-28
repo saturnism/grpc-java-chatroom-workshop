@@ -36,6 +36,7 @@
     <version>1.0-SNAPSHOT</version>
 
     <dependencies>
+        <!-- gRPC Dependencies -->
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-netty</artifactId>
@@ -88,5 +89,5 @@
         </plugins>
     </build>
 
-    
+
 </project>
