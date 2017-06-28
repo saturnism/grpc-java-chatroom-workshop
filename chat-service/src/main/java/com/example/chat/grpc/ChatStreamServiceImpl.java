@@ -40,6 +40,7 @@ import java.util.logging.Logger;
 public class ChatStreamServiceImpl extends ChatStreamServiceGrpc.ChatStreamServiceImplBase {
   private static final Logger logger = Logger.getLogger(ChatStreamServiceImpl.class.getName());
   private final ChatRoomRepository repository;
+  //A mapping of room name to the set of stream observers for a room
   private Map<String, Set<StreamObserver<ChatMessageFromServer>>> roomObservers = new ConcurrentHashMap<>();
 
   public ChatStreamServiceImpl(ChatRoomRepository repository) {
@@ -76,22 +77,28 @@ public class ChatStreamServiceImpl extends ChatStreamServiceGrpc.ChatStreamServi
         Timestamp now = Timestamp.newBuilder()
             .setSeconds(new Date().getTime())
             .build();
-        Set<StreamObserver<ChatMessageFromServer>> observers = getRoomObservers(chatMessage.getRoomName());
+
+        String roomName = chatMessage.getRoomName();
+        Set<StreamObserver<ChatMessageFromServer>> observers = getRoomObservers(roomName);
         switch (chatMessage.getType()) {
           case JOIN:
+            logger.info("joining room: " + roomName);
             observers.add(responseObserver);
             return;
           case LEAVE:
+            logger.info("leaving room: " + roomName);
             observers.remove(responseObserver);
             return;
           case TEXT:
             if (!observers.contains(responseObserver)) {
-              responseObserver.onError(new StatusRuntimeException(Status.FAILED_PRECONDITION.withDescription("Not in the room: " + chatMessage.getRoomName())));
+              logger.info("error - client not in room: " + roomName);
+              responseObserver.onError(new StatusRuntimeException(Status.FAILED_PRECONDITION.withDescription("Not in the room: " + roomName)));
             } else {
+              logger.info("sending message to room: " + roomName);
               final ChatMessageFromServer messageFromServer = ChatMessageFromServer.newBuilder()
                   .setTimestamp(now)
                   .setFrom(username)
-                  .setRoomName(chatMessage.getRoomName())
+                  .setRoomName(roomName)
                   .setMessage(chatMessage.getMessage())
                   .build();
               observers.stream().forEach(o -> o.onNext(messageFromServer));

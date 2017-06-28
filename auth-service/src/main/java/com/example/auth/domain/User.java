@@ -18,6 +18,7 @@ package com.example.auth.domain;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Created by rayt on 6/27/17.
@@ -36,6 +37,12 @@ public class User {
     this.username = original.username;
     this.password = original.password;
     this.roles.addAll(original.roles);
+  }
+
+  public User(String username, String password, Set<String> roles) {
+    this.username = username;
+    this.password = password;
+    this.roles = roles;
   }
 
   public String getUsername() {
@@ -68,5 +75,11 @@ public class User {
 
   public void removeRole(String role) {
     this.roles.remove(role);
+  }
+
+  @Override
+  public String toString() {
+    String rolesStr = roles.stream().collect(Collectors.joining(", "));
+    return username + "," + password + "," + rolesStr;
   }
 }
