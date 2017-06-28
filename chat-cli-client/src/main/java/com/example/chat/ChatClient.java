@@ -18,6 +18,7 @@ package com.example.chat;
 
 import com.example.auth.*;
 import com.example.chat.grpc.Constant;
+import com.example.chat.grpc.JwtCallCredential;
 import io.grpc.*;
 import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.StreamObserver;
@@ -98,18 +99,16 @@ public class ChatClient {
   public void initChatServices(String token) {
     logger.info("initializing chat services with token: " + token);
 
-    Metadata metadata = new Metadata();
-    metadata.put(Constant.JWT_METADATA_KEY, token);
-
     // TODO Add JWT Token via a Call Credential
     chatChannel = ManagedChannelBuilder.forTarget("localhost:9092")
-        .intercept(MetadataUtils.newAttachHeadersInterceptor(metadata))
         .usePlaintext(true)
         .build();
 
 
-    chatRoomService = ChatRoomServiceGrpc.newBlockingStub(chatChannel);
-    chatStreamService = ChatStreamServiceGrpc.newStub(chatChannel);
+    JwtCallCredential callCredential = new JwtCallCredential(token);
+
+    chatRoomService = ChatRoomServiceGrpc.newBlockingStub(chatChannel).withCallCredentials(callCredential);
+    chatStreamService = ChatStreamServiceGrpc.newStub(chatChannel).withCallCredentials(callCredential);
   }
 
   public void initChatStream() {
