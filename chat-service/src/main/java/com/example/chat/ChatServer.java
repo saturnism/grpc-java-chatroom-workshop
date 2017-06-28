@@ -16,10 +16,18 @@
 
 package com.example.chat;
 
+import brave.Tracing;
+import brave.grpc.GrpcTracing;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.example.auth.AuthenticationServiceGrpc;
+import com.example.chat.grpc.ChatRoomServiceImpl;
+import com.example.chat.grpc.ChatStreamServiceImpl;
+import com.example.chat.grpc.JwtServerInterceptor;
 import com.example.chat.repository.ChatRoomRepository;
 import io.grpc.*;
+import zipkin.Span;
+import zipkin.reporter.AsyncReporter;
+import zipkin.reporter.urlconnection.URLConnectionSender;
 
 import java.io.IOException;
 import java.util.logging.Logger;
@@ -31,17 +39,27 @@ public class ChatServer {
   private static final Logger logger = Logger.getLogger(ChatServer.class.getName());
 
   public static void main(String[] args) throws IOException, InterruptedException {
-    ChatRoomRepository repository = new ChatRoomRepository();
-    JwtServerInterceptor jwtServerInterceptor = new JwtServerInterceptor("chat-auth-issuer", Algorithm.HMAC256("secret"));
+    final AsyncReporter<Span> reporter = AsyncReporter.create(URLConnectionSender.create("http://localhost:9411/api/v1/spans"));
+    final GrpcTracing tracing = GrpcTracing.create(Tracing.newBuilder()
+        .localServiceName("chat-service")
+        .reporter(reporter)
+        .build());
+
+    final ChatRoomRepository repository = new ChatRoomRepository();
+    final JwtServerInterceptor jwtServerInterceptor = new JwtServerInterceptor("auth-issuer", Algorithm.HMAC256("secret"));
 
     final ManagedChannel channel = ManagedChannelBuilder.forTarget("localhost:9091")
+        .intercept(tracing.newClientInterceptor())
         .usePlaintext(true)
         .build();
 
     final AuthenticationServiceGrpc.AuthenticationServiceBlockingStub authService = AuthenticationServiceGrpc.newBlockingStub(channel);
+    final ChatRoomServiceImpl chatRoomService = new ChatRoomServiceImpl(repository, authService);
+    final ChatStreamServiceImpl chatStreamService = new ChatStreamServiceImpl(repository);
 
     final Server server = ServerBuilder.forPort(9092)
-        .addService(ServerInterceptors.intercept(new ChatRoomServiceImpl(repository, authService), jwtServerInterceptor))
+        .addService(ServerInterceptors.intercept(chatRoomService, jwtServerInterceptor, tracing.newServerInterceptor()))
+        .addService(ServerInterceptors.intercept(chatStreamService, jwtServerInterceptor, tracing.newServerInterceptor()))
         .build();
 
     Runtime.getRuntime().addShutdownHook(new Thread() {

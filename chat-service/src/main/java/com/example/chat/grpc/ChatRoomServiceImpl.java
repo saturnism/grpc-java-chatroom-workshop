@@ -14,15 +14,16 @@
  * limitations under the License.
  */
 
-package com.example.chat;
+package com.example.chat.grpc;
 
 import com.auth0.jwt.interfaces.DecodedJWT;
 import com.example.auth.AuthenticationServiceGrpc;
 import com.example.auth.AuthorizationRequest;
 import com.example.auth.AuthorizationResponse;
-import com.example.chat.repository.AlreadyExistsException;
+import com.example.chat.ChatRoomServiceGrpc;
+import com.example.chat.Empty;
+import com.example.chat.Room;
 import com.example.chat.repository.ChatRoomRepository;
-import com.example.chat.repository.NotFoundException;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
@@ -56,30 +57,24 @@ public class ChatRoomServiceImpl extends ChatRoomServiceGrpc.ChatRoomServiceImpl
 
   @Override
   public void createRoom(Room request, StreamObserver<Room> responseObserver) {
-    if (failBecauseNoAdminRole(responseObserver))
+    if (failBecauseNoAdminRole(responseObserver)) {
       return;
-
-    try {
-      Room room = repository.save(request);
-      responseObserver.onNext(room);
-      responseObserver.onCompleted();
-    } catch (AlreadyExistsException e) {
-      responseObserver.onError(e);
     }
+
+    Room room = repository.save(request);
+    responseObserver.onNext(room);
+    responseObserver.onCompleted();
   }
 
   @Override
   public void deleteRoom(Room request, StreamObserver<Room> responseObserver) {
-    if (failBecauseNoAdminRole(responseObserver))
+    if (failBecauseNoAdminRole(responseObserver)) {
       return;
-
-    try {
-      Room room = repository.delete(request);
-      responseObserver.onNext(room);
-      responseObserver.onCompleted();
-    } catch (NotFoundException e) {
-      responseObserver.onError(e);
     }
+
+    Room room = repository.delete(request);
+    responseObserver.onNext(room);
+    responseObserver.onCompleted();
   }
 
   @Override

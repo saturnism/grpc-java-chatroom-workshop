@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-package com.example.chat;
+package com.example.chat.grpc;
 
+import com.example.chat.*;
 import com.example.chat.repository.ChatRoomRepository;
 import com.google.protobuf.Timestamp;
 import io.grpc.stub.StreamObserver;
@@ -44,6 +45,8 @@ public class ChatStreamServiceImpl extends ChatStreamServiceGrpc.ChatStreamServi
   public StreamObserver<ChatMessage> chat(StreamObserver<ChatMessageFromServer> responseObserver) {
     observers.add(responseObserver);
 
+    final String username = Constant.USER_ID_CTX_KEY.get();
+
     return new StreamObserver<ChatMessage>() {
       @Override
       public void onNext(ChatMessage chatMessage) {
@@ -55,6 +58,7 @@ public class ChatStreamServiceImpl extends ChatStreamServiceGrpc.ChatStreamServi
 
         if (room == null) {
           responseObserver.onNext(ChatMessageFromServer.newBuilder()
+              .setFrom("system")
               .setTimestamp(now)
               .setMessage("Room does not exist: " + roomName)
           .build());
@@ -63,6 +67,7 @@ public class ChatStreamServiceImpl extends ChatStreamServiceGrpc.ChatStreamServi
 
         final ChatMessageFromServer messageFromServer = ChatMessageFromServer.newBuilder()
             .setTimestamp(now)
+            .setFrom(username)
             .setRoomName(chatMessage.getRoomName())
             .setMessage(chatMessage.getMessage())
             .build();

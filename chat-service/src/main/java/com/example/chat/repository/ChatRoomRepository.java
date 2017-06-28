@@ -35,19 +35,13 @@ public class ChatRoomRepository {
     return rooms.get(name);
   }
 
-  public Room save(Room room) throws AlreadyExistsException {
-    Room previous = rooms.putIfAbsent(room.getName(), room);
-    if (previous != null) {
-      throw new AlreadyExistsException("Room " + room.getName() + " already exists");
-    }
+  public Room save(Room room) {
+    rooms.put(room.getName(), room);
     return room;
   }
 
-  public Room delete(Room room) throws NotFoundException {
-    room = rooms.remove(room);
-    if (room != null) {
-      throw new NotFoundException("Room " + room.getName() + " was not found");
-    }
+  public Room delete(Room room) {
+    rooms.remove(room.getName());
     return room;
   }
 

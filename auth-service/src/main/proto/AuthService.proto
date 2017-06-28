@@ -25,14 +25,8 @@ message AuthenticationRequest {
     string password = 2;
 }
 
-enum AuthenticationStatus {
-    NOT_AUTHENTICATED = 0;
-    AUTHENTICATED = 1;
-}
-
 message AuthenticationResponse {
-    AuthenticationStatus status = 1;
-    string token = 2;
+    string token = 1;
 }
 
 message AuthorizationRequest {
