@@ -74,47 +74,17 @@ public class ChatStreamServiceImpl extends ChatStreamServiceGrpc.ChatStreamServi
     return new StreamObserver<ChatMessage>() {
       @Override
       public void onNext(ChatMessage chatMessage) {
-        Timestamp now = Timestamp.newBuilder()
-            .setSeconds(new Date().getTime())
-            .build();
 
-        String roomName = chatMessage.getRoomName();
-        Set<StreamObserver<ChatMessageFromServer>> observers = getRoomObservers(roomName);
-        switch (chatMessage.getType()) {
-          case JOIN:
-            logger.info("joining room: " + roomName);
-            observers.add(responseObserver);
-            return;
-          case LEAVE:
-            logger.info("leaving room: " + roomName);
-            observers.remove(responseObserver);
-            return;
-          case TEXT:
-            if (!observers.contains(responseObserver)) {
-              logger.info("error - client not in room: " + roomName);
-              responseObserver.onError(new StatusRuntimeException(Status.FAILED_PRECONDITION.withDescription("Not in the room: " + roomName)));
-            } else {
-              logger.info("sending message to room: " + roomName);
-              final ChatMessageFromServer messageFromServer = ChatMessageFromServer.newBuilder()
-                  .setTimestamp(now)
-                  .setFrom(username)
-                  .setRoomName(roomName)
-                  .setMessage(chatMessage.getMessage())
-                  .build();
-              observers.stream().forEach(o -> o.onNext(messageFromServer));
-            }
-        }
       }
 
       @Override
       public void onError(Throwable throwable) {
-        logger.log(Level.SEVERE, "Error in StreamObserver", throwable);
-        removeObserverFromAllRooms(responseObserver);
+
       }
 
       @Override
       public void onCompleted() {
-        removeObserverFromAllRooms(responseObserver);
+
       }
     };
   }
