@@ -33,6 +33,5 @@ public class Constant {
   // TODO Add a JWT Context Key
   public static final Context.Key<DecodedJWT> JWT_CTX_KEY = Context.key("jwt");
 
-  // TODO Add a User Context Key
   public static final Context.Key<String> USER_ID_CTX_KEY = Context.key("userId");
 }
