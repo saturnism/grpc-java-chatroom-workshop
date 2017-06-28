@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.example.chat.grpc;
+package com.example.auth.grpc;
 
 import io.grpc.*;
 

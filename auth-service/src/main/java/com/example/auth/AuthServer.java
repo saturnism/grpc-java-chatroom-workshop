@@ -21,6 +21,7 @@ import brave.grpc.GrpcTracing;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.example.auth.domain.User;
 import com.example.auth.grpc.AuthServiceImpl;
+import com.example.auth.grpc.ClientIdServerInterceptor;
 import com.example.auth.repository.UserRepository;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
@@ -66,9 +67,10 @@ public class AuthServer {
     final UserRepository repository = createRepository();
     final Algorithm algorithm = Algorithm.HMAC256("secret");
     final AuthServiceImpl authService = new AuthServiceImpl(repository, "auth-issuer", algorithm);
+    final ClientIdServerInterceptor clientIdServerInterceptor = new ClientIdServerInterceptor();
 
     final Server server = ServerBuilder.forPort(9091)
-        .addService(ServerInterceptors.intercept(authService, tracing.newServerInterceptor()))
+        .addService(ServerInterceptors.intercept(authService, clientIdServerInterceptor, tracing.newServerInterceptor()))
         .build();
 
     Runtime.getRuntime().addShutdownHook(new Thread() {

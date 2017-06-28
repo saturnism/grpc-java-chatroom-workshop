@@ -19,9 +19,13 @@ package com.example.chat;
 import brave.Tracing;
 import brave.grpc.GrpcTracing;
 import com.example.auth.*;
+import com.example.auth.grpc.Constant;
 import com.example.chat.grpc.JwtCallCredential;
+import io.grpc.ClientInterceptor;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.Metadata;
+import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.StreamObserver;
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
@@ -52,9 +56,13 @@ public class ChatClient {
         .reporter(reporter)
         .build());
 
+    final Metadata headers = new Metadata();
+    headers.put(Constant.CLIENT_ID_METADATA_KEY, "chat-cli-client");
+    ClientInterceptor headersInterceptor = MetadataUtils.newAttachHeadersInterceptor(headers);
+
     final ManagedChannel authChannel = ManagedChannelBuilder.forTarget("localhost:9091")
         .usePlaintext(true)
-        .intercept(tracing.newClientInterceptor())
+        .intercept(headersInterceptor, tracing.newClientInterceptor())
         .build();
     AuthenticationServiceGrpc.AuthenticationServiceBlockingStub authService = AuthenticationServiceGrpc.newBlockingStub(authChannel);
 
@@ -73,7 +81,7 @@ public class ChatClient {
 
     final ManagedChannel chatChannel = ManagedChannelBuilder.forTarget("localhost:9092")
         .usePlaintext(true)
-        .intercept(tracing.newClientInterceptor())
+        .intercept(headersInterceptor, tracing.newClientInterceptor())
         .build();
 
     ChatRoomServiceGrpc.ChatRoomServiceBlockingStub chatRoomService = ChatRoomServiceGrpc.newBlockingStub(chatChannel)

@@ -20,6 +20,8 @@ import brave.Tracing;
 import brave.grpc.GrpcTracing;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.example.auth.AuthenticationServiceGrpc;
+import com.example.auth.grpc.ClientIdClientInterceptor;
+import com.example.auth.grpc.ClientIdServerInterceptor;
 import com.example.chat.grpc.*;
 import com.example.chat.repository.ChatRoomRepository;
 import io.grpc.*;

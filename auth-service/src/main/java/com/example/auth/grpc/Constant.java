@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.example.chat.grpc;
+package com.example.auth.grpc;
 
 import com.auth0.jwt.interfaces.DecodedJWT;
 import io.grpc.Context;
@@ -26,8 +26,6 @@ import static io.grpc.Metadata.ASCII_STRING_MARSHALLER;
  * Created by rayt on 10/6/16.
  */
 public class Constant {
-  public static final Metadata.Key<String> JWT_METADATA_KEY = Metadata.Key.of("jwt", ASCII_STRING_MARSHALLER);
-  public static final Context.Key<DecodedJWT> JWT_CTX_KEY = Context.key("jwt");
-
-  public static final Context.Key<String> USER_ID_CTX_KEY = Context.key("userId");
+  public static final Metadata.Key<String> CLIENT_ID_METADATA_KEY = Metadata.Key.of("clientId", ASCII_STRING_MARSHALLER);
+  public static final Context.Key<String> CLIENT_ID_CTX_KEY = Context.key("clientId");
 }
