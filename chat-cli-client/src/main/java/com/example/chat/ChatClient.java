@@ -16,19 +16,17 @@
 
 package com.example.chat;
 
-import brave.Tracing;
-import brave.grpc.GrpcTracing;
 import com.example.auth.*;
-import com.example.chat.grpc.Constant;
 import com.example.chat.grpc.JwtCallCredential;
-import io.grpc.*;
-import io.grpc.stub.MetadataUtils;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 import jline.console.ConsoleReader;
 
 import java.io.IOException;
 import java.util.Iterator;
-import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -55,15 +53,6 @@ public class ChatClient {
 
   private CurrentState state = new CurrentState();
 
-  private AsyncReporter<Span> reporter = AsyncReporter.create(
-      URLConnectionSender.create("http://localhost:9411/api/v1/spans"));
-
-  private GrpcTracing tracing = GrpcTracing.create(Tracing.newBuilder()
-      .localServiceName("chat-client") // MAKE SURE YOU CHANGE THE NAME
-      .reporter(reporter)
-      .build());
-
-
   // StreamObserver to send to the server
   private StreamObserver<ChatMessage> toServer;
 
@@ -88,7 +77,6 @@ public class ChatClient {
     logger.info("initializing auth service");
     // TODO Build a new ManagedChannel
     authChannel = ManagedChannelBuilder.forTarget("localhost:9091")
-        .intercept(tracing.newClientInterceptor())
         .usePlaintext(true)
         .build();
 
@@ -106,7 +94,6 @@ public class ChatClient {
 
     // TODO Add JWT Token via a Call Credential
     chatChannel = ManagedChannelBuilder.forTarget("localhost:9092")
-        .intercept(tracing.newClientInterceptor())
         .usePlaintext(true)
         .build();
 
@@ -123,10 +110,13 @@ public class ChatClient {
     this.toServer = chatStreamService.chat(new StreamObserver<ChatMessageFromServer>() {
       @Override
       public void onNext(ChatMessageFromServer chatMessageFromServer) {
-        out.println(String.format("\n%tr %s> %s", chatMessageFromServer.getTimestamp().getSeconds(),
-            chatMessageFromServer.getFrom(),
-            chatMessageFromServer.getMessage()));
-        out.flush();
+        try {
+          printLine(console, String.format("%tr %s> %s", chatMessageFromServer.getTimestamp().getSeconds(),
+              chatMessageFromServer.getFrom(),
+              chatMessageFromServer.getMessage()));
+        } catch (IOException e) {
+          logger.log(Level.SEVERE, "error printing to console", e);
+        }
       }
 
       @Override
@@ -315,9 +305,9 @@ public class ChatClient {
   private void leaveRoom(String room) {
     logger.info("leaving room: " + room);
     toServer.onNext(ChatMessage.newBuilder()
-            .setRoomName(room)
-            .setType(MessageType.LEAVE)
-            .build());
+        .setRoomName(room)
+        .setType(MessageType.LEAVE)
+        .build());
     logger.info("left room: " + room);
   }
 
@@ -329,9 +319,9 @@ public class ChatClient {
   private void joinRoom(String room) {
     logger.info("joinining room: " + room);
     toServer.onNext(ChatMessage.newBuilder()
-            .setRoomName(room)
-            .setType(MessageType.JOIN)
-            .build());
+        .setRoomName(room)
+        .setType(MessageType.JOIN)
+        .build());
     logger.info("joined room: " + room);
   }
 
@@ -343,8 +333,8 @@ public class ChatClient {
   private void createRoom(String room) {
     logger.info("create room: " + room);
     chatRoomService.createRoom(Room.newBuilder()
-            .setName(room)
-            .build());
+        .setName(room)
+        .build());
     logger.info("created room: " + room);
   }
 

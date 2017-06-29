@@ -44,19 +44,10 @@ public class AuthServer {
   public static void main(String[] args) throws IOException, InterruptedException {
     final UserRepository repository = createRepository();
 
-    AsyncReporter<Span> reporter = AsyncReporter.create(
-        URLConnectionSender.create("http://localhost:9411/api/v1/spans"));
-
-    GrpcTracing tracing = GrpcTracing.create(Tracing.newBuilder()
-        .localServiceName("auth-service")
-        .reporter(reporter)
-        .build());
-
-
     // TODO Use ServerBuilder to create a new Server instance. Start it, and await termination.
     Algorithm algorithm = Algorithm.HMAC256("secret");
     Server server = ServerBuilder.forPort(9091)
-        .addService(ServerInterceptors.intercept(new AuthServiceImpl(repository, "auth-issuer", algorithm), tracing.newServerInterceptor()))
+        .addService(new AuthServiceImpl(repository, "auth-issuer", algorithm))
         .build();
 
     Runtime.getRuntime().addShutdownHook(new Thread() {
