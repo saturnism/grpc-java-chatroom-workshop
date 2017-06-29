@@ -24,8 +24,12 @@ import com.auth0.jwt.interfaces.DecodedJWT;
 import com.example.auth.*;
 import com.example.auth.domain.User;
 import com.example.auth.repository.UserRepository;
+import io.grpc.Context;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Created by rayt on 6/27/17.

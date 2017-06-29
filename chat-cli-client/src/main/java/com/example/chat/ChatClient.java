@@ -16,6 +16,8 @@
 
 package com.example.chat;
 
+import brave.Tracing;
+import brave.grpc.GrpcTracing;
 import com.example.auth.*;
 import com.example.chat.grpc.Constant;
 import com.example.chat.grpc.JwtCallCredential;
@@ -29,10 +31,14 @@ import org.jline.reader.UserInterruptException;
 import org.jline.reader.impl.completer.StringsCompleter;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
+import zipkin.Span;
+import zipkin.reporter.AsyncReporter;
+import zipkin.reporter.urlconnection.URLConnectionSender;
 
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Iterator;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -60,6 +66,15 @@ public class ChatClient {
 
   private CurrentState state = new CurrentState();
 
+  private AsyncReporter<Span> reporter = AsyncReporter.create(
+      URLConnectionSender.create("http://localhost:9411/api/v1/spans"));
+
+  private GrpcTracing tracing = GrpcTracing.create(Tracing.newBuilder()
+      .localServiceName("chat-client") // MAKE SURE YOU CHANGE THE NAME
+      .reporter(reporter)
+      .build());
+
+
   // StreamObserver to send to the server
   private StreamObserver<ChatMessage> toServer;
 
@@ -84,6 +99,7 @@ public class ChatClient {
     logger.info("initializing auth service");
     // TODO Build a new ManagedChannel
     authChannel = ManagedChannelBuilder.forTarget("localhost:9091")
+        .intercept(tracing.newClientInterceptor())
         .usePlaintext(true)
         .build();
 
@@ -101,9 +117,9 @@ public class ChatClient {
 
     // TODO Add JWT Token via a Call Credential
     chatChannel = ManagedChannelBuilder.forTarget("localhost:9092")
+        .intercept(tracing.newClientInterceptor())
         .usePlaintext(true)
         .build();
-
 
     JwtCallCredential callCredential = new JwtCallCredential(token);
 
@@ -114,6 +130,28 @@ public class ChatClient {
   public void initChatStream() {
     // TODO Call chatStreamService.chat(...)
     // TODO and assign the server responseObserver to toServer variable
+
+    this.toServer = chatStreamService.chat(new StreamObserver<ChatMessageFromServer>() {
+      @Override
+      public void onNext(ChatMessageFromServer chatMessageFromServer) {
+        out.println(String.format("\n%tr %s> %s", chatMessageFromServer.getTimestamp().getSeconds(),
+            chatMessageFromServer.getFrom(),
+            chatMessageFromServer.getMessage()));
+        out.flush();
+      }
+
+      @Override
+      public void onError(Throwable throwable) {
+        logger.log(Level.SEVERE, "gRPC error", throwable);
+        shutdown();
+      }
+
+      @Override
+      public void onCompleted() {
+        logger.severe("server closed connection, shutting down...");
+        shutdown();
+      }
+    });
   }
 
   protected void prompt() throws Exception {
@@ -317,9 +355,15 @@ public class ChatClient {
    */
   private void sendMessage(String room, String message) {
     logger.info("sending chat message");
-    // TODO call toServer.onNext(...)
-    logger.severe("not implemented!");
+    if (toServer == null) {
+      logger.severe("Not connected");
+    }
 
+    toServer.onNext(ChatMessage.newBuilder()
+        .setType(MessageType.TEXT)
+        .setRoomName(room)
+        .setMessage(message)
+        .build());
   }
 
   class CurrentState {

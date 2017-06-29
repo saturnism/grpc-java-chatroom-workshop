@@ -74,17 +74,42 @@ public class ChatStreamServiceImpl extends ChatStreamServiceGrpc.ChatStreamServi
     return new StreamObserver<ChatMessage>() {
       @Override
       public void onNext(ChatMessage chatMessage) {
+        Set<StreamObserver<ChatMessageFromServer>> observers = getRoomObservers(chatMessage.getRoomName());
+        switch (chatMessage.getType()) {
+          case JOIN:
+            observers.add(responseObserver);
+            break;
+          case LEAVE:
+            observers.remove(responseObserver);
+            break;
+          case TEXT:
+            if (!observers.contains(responseObserver)) {
+              responseObserver.onError(Status.PERMISSION_DENIED.withDescription("You are not in the room " + chatMessage.getRoomName()).asRuntimeException());
+              return;
+            }
+            Timestamp now = Timestamp.newBuilder().setSeconds(new Date().getTime()).build();
+            ChatMessageFromServer messageFromServer = ChatMessageFromServer.newBuilder()
+                .setType(chatMessage.getType())
+                .setTimestamp(now)
+                .setFrom(username)
+                .setMessage(chatMessage.getMessage())
+                .setRoomName(chatMessage.getRoomName())
+                .build();
 
+            observers.stream().forEach(o -> o.onNext(messageFromServer));
+            break;
+        }
       }
 
       @Override
       public void onError(Throwable throwable) {
-
+        logger.log(Level.SEVERE, "gRPC error", throwable);
+        removeObserverFromAllRooms(responseObserver);
       }
 
       @Override
       public void onCompleted() {
-
+        removeObserverFromAllRooms(responseObserver);
       }
     };
   }

@@ -16,6 +16,8 @@
 
 package com.example.chat;
 
+import brave.Tracing;
+import brave.grpc.GrpcTracing;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.example.auth.AuthenticationServiceGrpc;
 import com.example.chat.grpc.ChatRoomServiceImpl;
@@ -24,6 +26,9 @@ import com.example.chat.grpc.JwtClientInterceptor;
 import com.example.chat.grpc.JwtServerInterceptor;
 import com.example.chat.repository.ChatRoomRepository;
 import io.grpc.*;
+import zipkin.Span;
+import zipkin.reporter.AsyncReporter;
+import zipkin.reporter.urlconnection.URLConnectionSender;
 
 import java.io.IOException;
 import java.util.logging.Logger;
@@ -39,10 +44,18 @@ public class ChatServer {
     final JwtServerInterceptor jwtServerInterceptor = new JwtServerInterceptor("auth-issuer", Algorithm.HMAC256("secret"));
 
     // TODO Initial tracer
+    AsyncReporter<Span> reporter = AsyncReporter.create(
+        URLConnectionSender.create("http://localhost:9411/api/v1/spans"));
+
+    GrpcTracing tracing = GrpcTracing.create(Tracing.newBuilder()
+        .localServiceName("chat-server")
+        .reporter(reporter)
+        .build());
+
 
     // TODO Add trace interceptor
     final ManagedChannel authChannel = ManagedChannelBuilder.forTarget("localhost:9091")
-        .intercept(new JwtClientInterceptor())
+        .intercept(new JwtClientInterceptor(), tracing.newClientInterceptor())
         .usePlaintext(true)
         .build();
 
@@ -52,8 +65,8 @@ public class ChatServer {
 
     // TODO Add JWT Server Interceptor, then later, trace interceptor
     final Server server = ServerBuilder.forPort(9092)
-        .addService(ServerInterceptors.intercept(chatRoomService, jwtServerInterceptor))
-        .addService(ServerInterceptors.intercept(chatStreamService, jwtServerInterceptor))
+        .addService(ServerInterceptors.intercept(chatRoomService, jwtServerInterceptor, tracing.newServerInterceptor()))
+        .addService(ServerInterceptors.intercept(chatStreamService, jwtServerInterceptor, tracing.newServerInterceptor()))
         .build();
 
     Runtime.getRuntime().addShutdownHook(new Thread() {
