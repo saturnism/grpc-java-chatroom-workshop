@@ -25,23 +25,17 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
-import org.jline.reader.EndOfFileException;
-import org.jline.reader.LineReader;
-import org.jline.reader.LineReaderBuilder;
-import org.jline.reader.UserInterruptException;
-import org.jline.reader.impl.completer.StringsCompleter;
-import org.jline.terminal.Terminal;
-import org.jline.terminal.TerminalBuilder;
+import jline.console.ConsoleReader;
 import zipkin.Span;
 import zipkin.reporter.AsyncReporter;
 import zipkin.reporter.urlconnection.URLConnectionSender;
 
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.util.Iterator;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import static com.example.chat.ConsoleUtil.printLine;
 
 enum ClientStatus {
   STARTED, AUTHENTICATED, IN_ROOM
@@ -53,16 +47,14 @@ enum ClientStatus {
 public class ChatClient {
   private static Logger logger = Logger.getLogger(ChatClient.class.getName());
 
-  // Initialize terminal
-  private final Terminal terminal = TerminalBuilder.terminal();
-  private final PrintWriter out = terminal.writer();
+  private final ConsoleReader console = new ConsoleReader();
 
   // Initialize Tracing contexts
   private final AsyncReporter<Span> reporter = AsyncReporter.create(URLConnectionSender.create("http://localhost:9411/api/v1/spans"));
   private final GrpcTracing tracing = GrpcTracing.create(Tracing.newBuilder()
-      .localServiceName("chat-client")
-      .reporter(reporter)
-      .build());
+          .localServiceName("chat-client")
+          .reporter(reporter)
+          .build());
 
   // Channels
   private ManagedChannel authChannel;
@@ -96,8 +88,8 @@ public class ChatClient {
   public void initAuthService() {
     logger.info("initializing auth service");
     authChannel = ManagedChannelBuilder.forTarget("localhost:9091")
-        .intercept(tracing.newClientInterceptor())
-        .usePlaintext(true).build();
+            .intercept(tracing.newClientInterceptor())
+            .usePlaintext(true).build();
 
     authService = AuthenticationServiceGrpc.newBlockingStub(authChannel);
   }
@@ -112,9 +104,9 @@ public class ChatClient {
     JwtCallCredential callCredential = new JwtCallCredential(token);
 
     chatChannel = ManagedChannelBuilder.forTarget("localhost:9092")
-        .intercept(tracing.newClientInterceptor())
-        .usePlaintext(true)
-        .build();
+            .intercept(tracing.newClientInterceptor())
+            .usePlaintext(true)
+            .build();
 
     chatRoomService = ChatRoomServiceGrpc.newBlockingStub(chatChannel).withCallCredentials(callCredential);
     chatStreamService = ChatStreamServiceGrpc.newStub(chatChannel).withCallCredentials(callCredential);
@@ -124,10 +116,18 @@ public class ChatClient {
     this.toServer = chatStreamService.chat(new StreamObserver<ChatMessageFromServer>() {
       @Override
       public void onNext(ChatMessageFromServer chatMessageFromServer) {
-        out.println(String.format("\n%tr %s> %s", chatMessageFromServer.getTimestamp().getSeconds(),
-            chatMessageFromServer.getFrom(),
-            chatMessageFromServer.getMessage()));
-        out.flush();
+        if (!(chatMessageFromServer.getFrom().equalsIgnoreCase(state.username))) {
+          String chatMessage = String.format("\n%tr %s:%s-> %s", chatMessageFromServer.getTimestamp().getSeconds(),
+                  chatMessageFromServer.getRoomName(),
+                  chatMessageFromServer.getFrom(),
+                  chatMessageFromServer.getMessage());
+
+          try {
+            printLine(console, chatMessage);
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+        }
       }
 
       @Override
@@ -144,26 +144,29 @@ public class ChatClient {
   }
 
   protected void prompt() throws Exception {
-
-    StringsCompleter stringsCompleter = new StringsCompleter("/login", "/quit", "/exit", "/join", "/leave", "/create", "/list");
+/*
+    //StringsCompleter stringsCompleter = new StringsCompleter("/login", "/quit", "/exit", "/join", "/leave", "/create", "/list");
     LineReader lineReader = LineReaderBuilder.builder()
         .terminal(terminal)
         .completer(stringsCompleter)
         .build();
-    out.println("Press Ctrl+D or Ctrl+C to quit");
+*/
+
+    console.println("Press Ctrl+D or Ctrl+C to quit");
 
     while (true) {
       try {
         switch (state.status) {
           case STARTED:
-            readLogin(lineReader);
+            readLogin();
             break;
           case AUTHENTICATED:
           case IN_ROOM:
-            readCommand(lineReader);
+            readCommand();
             break;
         }
-      } catch (EndOfFileException | UserInterruptException e) {
+      } catch (Exception e) {
+        e.printStackTrace();
         shutdown();
       }
     }
@@ -180,20 +183,20 @@ public class ChatClient {
     System.exit(1);
   }
 
-  protected void readLogin(LineReader lineReader) throws Exception {
+  protected void readLogin() throws Exception {
     String prompt = "/login [username] | /quit\n-> ";
 
-    String line = lineReader.readLine(prompt);
+    String line = console.readLine(prompt);
     String[] splitLine = line.split(" ");
     String command = splitLine[0];
     if (splitLine.length >= 2) {
       String username = splitLine[1];
       if (command.equalsIgnoreCase("/create")) {
         logger.info("creating user not implemented");
-        //createUser(username, lineReader, authService);
+        //createUser(username, consoleReader, authService);
       } else if (command.equalsIgnoreCase("/login")) {
         logger.info("processing login user");
-        String password = lineReader.readLine("password> ", '*');
+        String password = console.readLine("password> ", '*');
         String token = authenticate(username, password);
         if (token != null) {
           this.state = new CurrentState(ClientStatus.AUTHENTICATED, username, token, null);
@@ -206,10 +209,11 @@ public class ChatClient {
     }
   }
 
-  protected void readCommand(LineReader lineReader) {
-    String prompt = "[chat message] | /join [room] | /leave [room] | /create [room] | /list | /quit\n" + this.state.username + "-> ";
+  protected void readCommand() throws IOException {
+    String help = "[chat message] | /join [room] | /leave [room] | /create [room] | /list | /quit";
+    String prompt = this.state.username + "-> ";
 
-    String line = lineReader.readLine(prompt);
+    String line = console.readLine(prompt);
     if (line.startsWith("/")) {
       if ("/quit".equalsIgnoreCase(line)) {
         shutdown();
@@ -222,6 +226,8 @@ public class ChatClient {
           leaveRoom(state.room);
           this.state = new CurrentState(ClientStatus.AUTHENTICATED, state.username, state.token, null);
         }
+      } else if ("/?".equalsIgnoreCase(line)) {
+        console.println(help);
       } else {
         String[] splitLine = line.split(" ");
         if (splitLine.length == 2) {
@@ -263,15 +269,15 @@ public class ChatClient {
 
     try {
       AuthenticationResponse authenticationReponse = authService.authenticate(AuthenticationRequest.newBuilder()
-          .setUsername(username)
-          .setPassword(password)
-          .build());
+              .setUsername(username)
+              .setPassword(password)
+              .build());
 
       String token = authenticationReponse.getToken();
 
       AuthorizationResponse authorizationResponse = authService.authorization(AuthorizationRequest.newBuilder()
-          .setToken(token)
-          .build());
+              .setToken(token)
+              .build());
 
       logger.info("user has these roles: " + authorizationResponse.getRolesList());
 
@@ -292,7 +298,13 @@ public class ChatClient {
   private void listRooms() {
     logger.info("listing rooms");
     Iterator<Room> rooms = chatRoomService.getRooms(Empty.getDefaultInstance());
-    rooms.forEachRemaining(r -> out.println("Room: " + r.getName()));
+    rooms.forEachRemaining(r -> {
+      try {
+        console.println("Room: " + r.getName());
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+    });
   }
 
   /**
@@ -301,9 +313,9 @@ public class ChatClient {
   private void leaveRoom(String room) {
     logger.info("leaving room: " + room);
     toServer.onNext(ChatMessage.newBuilder()
-        .setRoomName(room)
-        .setType(MessageType.LEAVE)
-        .build());
+            .setRoomName(room)
+            .setType(MessageType.LEAVE)
+            .build());
     logger.info("left room: " + room);
   }
 
@@ -315,9 +327,9 @@ public class ChatClient {
   private void joinRoom(String room) {
     logger.info("joinining room: " + room);
     toServer.onNext(ChatMessage.newBuilder()
-        .setRoomName(room)
-        .setType(MessageType.JOIN)
-        .build());
+            .setRoomName(room)
+            .setType(MessageType.JOIN)
+            .build());
     logger.info("joined room: " + room);
   }
 
@@ -329,8 +341,8 @@ public class ChatClient {
   private void createRoom(String room) {
     logger.info("create room: " + room);
     chatRoomService.createRoom(Room.newBuilder()
-        .setName(room)
-        .build());
+            .setName(room)
+            .build());
     logger.info("created room: " + room);
   }
 
@@ -343,10 +355,10 @@ public class ChatClient {
   private void sendMessage(String room, String message) {
     logger.info("sending chat message");
     toServer.onNext(ChatMessage.newBuilder()
-        .setRoomName(room)
-        .setType(MessageType.TEXT)
-        .setMessage(message)
-        .build());
+            .setRoomName(room)
+            .setType(MessageType.TEXT)
+            .setMessage(message)
+            .build());
   }
 
   class CurrentState {
