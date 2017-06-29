@@ -16,6 +16,8 @@
 
 package com.example.chat;
 
+import brave.Tracing;
+import brave.grpc.GrpcTracing;
 import com.example.auth.*;
 import com.example.chat.grpc.JwtCallCredential;
 import io.grpc.ManagedChannel;
@@ -24,6 +26,9 @@ import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 import jline.console.ConsoleReader;
+import zipkin.Span;
+import zipkin.reporter.AsyncReporter;
+import zipkin.reporter.urlconnection.URLConnectionSender;
 
 import java.io.IOException;
 import java.util.Iterator;
@@ -56,6 +61,15 @@ public class ChatClient {
   // StreamObserver to send to the server
   private StreamObserver<ChatMessage> toServer;
 
+  private AsyncReporter<Span> reporter = AsyncReporter.create(
+      URLConnectionSender.create("http://localhost:9411/api/v1/spans"));
+
+  private GrpcTracing tracing = GrpcTracing.create(Tracing.newBuilder()
+      .localServiceName("chat-client") // MAKE SURE YOU CHANGE THE NAME
+      .reporter(reporter)
+      .build());
+
+
   public ChatClient() throws IOException {
   }
 
@@ -77,6 +91,7 @@ public class ChatClient {
     logger.info("initializing auth service");
     // TODO Build a new ManagedChannel
     authChannel = ManagedChannelBuilder.forTarget("localhost:9091")
+        .intercept(tracing.newClientInterceptor())
         .usePlaintext(true)
         .build();
 
@@ -94,6 +109,7 @@ public class ChatClient {
 
     // TODO Add JWT Token via a Call Credential
     chatChannel = ManagedChannelBuilder.forTarget("localhost:9092")
+        .intercept(tracing.newClientInterceptor())
         .usePlaintext(true)
         .build();
 

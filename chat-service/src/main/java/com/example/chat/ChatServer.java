@@ -43,9 +43,18 @@ public class ChatServer {
     final ChatRoomRepository repository = new ChatRoomRepository();
     final JwtServerInterceptor jwtServerInterceptor = new JwtServerInterceptor("auth-issuer", Algorithm.HMAC256("secret"));
 
+    AsyncReporter<Span> reporter = AsyncReporter.create(
+        URLConnectionSender.create("http://localhost:9411/api/v1/spans"));
+
+    GrpcTracing tracing = GrpcTracing.create(Tracing.newBuilder()
+        .localServiceName("chat-service") // MAKE SURE YOU CHANGE THE NAME
+        .reporter(reporter)
+        .build());
+
+
     // TODO Add trace interceptor
     final ManagedChannel authChannel = ManagedChannelBuilder.forTarget("localhost:9091")
-        .intercept(new JwtClientInterceptor())
+        .intercept(new JwtClientInterceptor(), tracing.newClientInterceptor())
         .usePlaintext(true)
         .build();
 
@@ -55,8 +64,8 @@ public class ChatServer {
 
     // TODO Add JWT Server Interceptor, then later, trace interceptor
     final Server server = ServerBuilder.forPort(9092)
-        .addService(ServerInterceptors.intercept(chatRoomService, jwtServerInterceptor))
-        .addService(ServerInterceptors.intercept(chatStreamService, jwtServerInterceptor))
+        .addService(ServerInterceptors.intercept(chatRoomService, jwtServerInterceptor, tracing.newServerInterceptor()))
+        .addService(ServerInterceptors.intercept(chatStreamService, jwtServerInterceptor, tracing.newServerInterceptor()))
         .build();
 
     Runtime.getRuntime().addShutdownHook(new Thread() {
