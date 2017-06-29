@@ -20,6 +20,7 @@ import brave.Tracing;
 import brave.grpc.GrpcTracing;
 import com.example.auth.*;
 import com.example.chat.grpc.JwtCallCredential;
+import com.example.chat.grpc.JwtClientInterceptor;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
@@ -88,6 +89,7 @@ public class ChatClient {
   public void initAuthService() {
     logger.info("initializing auth service");
     authChannel = ManagedChannelBuilder.forTarget("localhost:9091")
+            .intercept(new JwtClientInterceptor())
             .intercept(tracing.newClientInterceptor())
             .usePlaintext(true).build();
 
